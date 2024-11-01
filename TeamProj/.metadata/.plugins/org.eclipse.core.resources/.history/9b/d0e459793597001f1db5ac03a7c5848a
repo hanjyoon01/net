@@ -1,0 +1,77 @@
+package Server;
+
+import java.io.*;
+import java.net.*;
+import java.util.*;
+
+public class GameServer {
+    private static final int PORT = 12345;
+    private static final int MAX_PLAYERS = 4;
+    private static List<ClientHandler> clients = new ArrayList<>();
+
+    public static void main(String[] args) {
+        System.out.println("서버가 시작되었습니다. 클라이언트를 기다립니다...");
+
+        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+            while (clients.size() < MAX_PLAYERS) {
+                Socket socket = serverSocket.accept();
+                System.out.println("클라이언트가 연결되었습니다.");
+
+                ClientHandler clientHandler = new ClientHandler(socket, clients.size() + 1);
+                clients.add(clientHandler);
+                new Thread(clientHandler).start();
+
+                if (clients.size() == MAX_PLAYERS) {
+                    startGame();
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void startGame() {
+        System.out.println("모든 플레이어가 접속했습니다. 게임을 시작합니다!");
+
+        for (ClientHandler client : clients) {
+            client.sendMessage("게임이 시작되었습니다!");
+        }
+    }
+
+    static class ClientHandler implements Runnable {
+        private Socket socket;
+        private int playerNumber;
+        private PrintWriter out;
+
+        public ClientHandler(Socket socket, int playerNumber) {
+            this.socket = socket;
+            this.playerNumber = playerNumber;
+        }
+
+        @Override
+        public void run() {
+            try {
+                out = new PrintWriter(socket.getOutputStream(), true);
+                out.println("당신은 플레이어 " + playerNumber + "입니다.");
+
+                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                String inputLine;
+                while ((inputLine = in.readLine()) != null) {
+                    System.out.println("플레이어 " + playerNumber + "로부터 메시지: " + inputLine);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                try {
+                    socket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        public void sendMessage(String message) {
+            out.println(message);
+        }
+    }
+}

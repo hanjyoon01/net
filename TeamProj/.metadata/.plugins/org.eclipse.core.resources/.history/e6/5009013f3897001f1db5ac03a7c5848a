@@ -1,0 +1,122 @@
+package Server;
+
+import java.io.*;
+import java.net.*;
+import java.util.*;
+
+public class GameServer {
+    private static final int PORT = 12345;
+    private static final int MAX_PLAYERS = 4;
+    private static List<ClientHandler> clients = new ArrayList<>();
+    private static Map<Integer, Integer> votes = new HashMap<>(); // MVP 투표 결과 저장
+
+    public static void main(String[] args) {
+        System.out.println("서버가 시작되었습니다. 클라이언트를 기다립니다...");
+
+        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+            while (clients.size() < MAX_PLAYERS) {
+                Socket socket = serverSocket.accept();
+                System.out.println("클라이언트가 연결되었습니다.");
+
+                ClientHandler clientHandler = new ClientHandler(socket, clients.size() + 1);
+                clients.add(clientHandler);
+                new Thread(clientHandler).start();
+
+                if (clients.size() == MAX_PLAYERS) {
+                    startGame();
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void startGame() {
+        System.out.println("모든 플레이어가 접속했습니다. 게임을 시작합니다!");
+
+        for (ClientHandler client : clients) {
+            client.sendMessage("게임이 시작되었습니다!");
+        }
+
+        // 게임 로직을 실행했다고 가정하고, 게임 종료 후 MVP 투표 시작
+        initiateMVPElection();
+    }
+
+    private static void initiateMVPElection() {
+        System.out.println("게임이 종료되었습니다. MVP 투표를 시작합니다!");
+
+        for (ClientHandler client : clients) {
+            client.sendMessage("게임이 종료되었습니다! 투표를 통해 MVP를 선택해주세요.");
+            client.sendMessage("플레이어 번호(1-4) 중 가장 잘한 사람에게 투표하세요:");
+        }
+    }
+
+    private static void tallyVotes() {
+        int mvp = votes.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .get().getKey();
+        
+        System.out.println("MVP는 플레이어 " + mvp + "입니다!");
+
+        for (ClientHandler client : clients) {
+            client.sendMessage("투표가 완료되었습니다! MVP는 플레이어 " + mvp + "입니다!");
+            client.sendMessage("메인 화면으로 돌아갑니다.");
+        }
+
+        // 투표 초기화 및 메인화면으로 돌아가기 준비
+        votes.clear();
+        clients.forEach(ClientHandler::resetForNextGame);
+    }
+
+    static class ClientHandler implements Runnable {
+        private Socket socket;
+        private int playerNumber;
+        private PrintWriter out;
+        private BufferedReader in;
+
+        public ClientHandler(Socket socket, int playerNumber) {
+            this.socket = socket;
+            this.playerNumber = playerNumber;
+        }
+
+        @Override
+        public void run() {
+            try {
+                out = new PrintWriter(socket.getOutputStream(), true);
+                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                out.println("당신은 플레이어 " + playerNumber + "입니다.");
+                
+                int voteNum = 0;
+                String inputLine;
+                while ((inputLine = in.readLine()) != null) {
+                    if (inputLine.startsWith("vote")) {
+                        int voteForPlayer = Integer.parseInt(inputLine.split(" ")[1]);
+                        votes.put(voteForPlayer, votes.getOrDefault(voteForPlayer, 0) + 1);
+                        voteNum++;
+                        if (voteNum == MAX_PLAYERS) {
+                            tallyVotes();
+                        }
+                    } else {
+                        System.out.println("플레이어 " + playerNumber + "로부터 메시지: " + inputLine);
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                try {
+                    socket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        public void sendMessage(String message) {
+            out.println(message);
+        }
+
+        public void resetForNextGame() {
+            sendMessage("메인 화면으로 돌아갑니다.");
+        }
+    }
+}

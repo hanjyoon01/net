@@ -1,0 +1,88 @@
+package Client;
+
+import java.io.*;
+import java.net.*;
+import java.util.Scanner;
+
+public class GameClient {
+    private static final String SERVER_ADDRESS = "localhost";
+    private static final int PORT = 12345;
+    private Socket socket;
+    private PrintWriter out;
+    private BufferedReader in;
+    private Scanner scanner = new Scanner(System.in);
+
+    public static void main(String[] args) {
+        GameClient client = new GameClient();
+        client.showMainMenu();
+    }
+
+    private void showMainMenu() {
+        while (true) {
+            System.out.println("==== 게임 메인화면 ====");
+            System.out.println("1. 게임에 참여하기");
+            System.out.println("2. 게임 규칙 보기");
+            System.out.println("3. 종료");
+            System.out.print("선택: ");
+            int choice = scanner.nextInt();
+            scanner.nextLine();  // 개행 문자 제거
+
+            switch (choice) {
+                case 1:
+                    joinGame();
+                    break;
+                case 2:
+                    showGameRules();
+                    break;
+                case 3:
+                    System.out.println("게임을 종료합니다.");
+                    return;
+                default:
+                    System.out.println("잘못된 선택입니다. 다시 선택해주세요.");
+            }
+        }
+    }
+
+    private void joinGame() {
+        System.out.println("게임에 참여합니다...");
+
+        try {
+            socket = new Socket(SERVER_ADDRESS, PORT);
+            System.out.println("서버에 연결되었습니다.");
+
+            out = new PrintWriter(socket.getOutputStream(), true);
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+            String serverMessage;
+            while ((serverMessage = in.readLine()) != null) {
+                System.out.println("서버: " + serverMessage);
+
+                if (serverMessage.startsWith("플레이어 번호")) {
+                    continue;
+                } else if (serverMessage.contains("투표를 통해 MVP를 선택")) {
+                    conductMVPElection();
+                } else if (serverMessage.contains("메인 화면으로 돌아갑니다.")) {
+                    socket.close();
+                    showMainMenu();
+                    break;
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void conductMVPElection() {
+        System.out.println("MVP 투표를 진행합니다. 플레이어 번호(1-4) 중에서 투표:");
+        int vote = scanner.nextInt();
+        scanner.nextLine(); // 개행 문자 제거
+        out.println("vote " + vote);
+    }
+
+    private void showGameRules() {
+        System.out.println("==== 게임 규칙 ====");
+        System.out.println("4명의 플레이어가 순서대로 번호를 부여받고, 모두 접속 시 게임이 시작됩니다.");
+        System.out.println("게임 규칙 열람을 완료했습니다.");
+    }
+}
+
